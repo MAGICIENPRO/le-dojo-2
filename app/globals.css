@@ -1,0 +1,241 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   🔥 LE DOJO 2.0 — GLOBAL STYLES
+   Design System Magma — Dark Mode Natif
+   ============================================================ */
+
+@layer base {
+  /* ---------- ROOT VARIABLES ---------- */
+  :root {
+    --fire-yellow: #FFD000;
+    --fire-amber: #FF9500;
+    --fire-orange: #FF6200;
+    --fire-red: #E03000;
+    --fire-ember: #B82200;
+
+    --black-base: #020202;
+    --black-light: #0A0A0A;
+    --black-card: #0F0F0F;
+    --black-border: #1C1C1C;
+    --black-hover: #161616;
+
+    --white: #FFFFFF;
+    --white-muted: #AAAAAA;
+    --white-dim: #666666;
+
+    --success: #22C55E;
+    --warning: #FBBF24;
+    --error: #EF4444;
+    --info: #3B82F6;
+
+    --sidebar-width: 240px;
+    --sidebar-collapsed: 72px;
+    --topbar-height: 64px;
+    --mobile-nav-height: 72px;
+  }
+
+  /* ---------- BASE STYLES ---------- */
+  html {
+    @apply scroll-smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-black-base text-white font-body;
+    min-height: 100vh;
+  }
+
+  /* ---------- SELECTION ---------- */
+  ::selection {
+    background: rgba(255, 98, 0, 0.3);
+    color: #FFFFFF;
+  }
+
+  /* ---------- SCROLLBAR ---------- */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--black-base);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--black-border);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--white-dim);
+  }
+
+  /* ---------- FOCUS STYLES ---------- */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-fire-orange ring-offset-2 ring-offset-black-base;
+  }
+}
+
+@layer components {
+  /* ============================================================
+     🃏 GLASS CARDS
+     ============================================================ */
+  .glass-card {
+    @apply bg-black-card border border-black-border rounded-card;
+    backdrop-filter: blur(12px);
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    #0F0F0F;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+
+  .glass-card-hover:hover {
+    @apply border-fire-orange/30 shadow-card-hover;
+    transform: translateY(-2px);
+  }
+
+  /* ============================================================
+     🔥 FIRE EFFECTS
+     ============================================================ */
+  .glow-fire {
+    box-shadow: 0 0 20px rgba(255, 98, 0, 0.3),
+                0 0 60px rgba(255, 98, 0, 0.1);
+  }
+
+  .glow-fire-pulse {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .gradient-fire-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #FFD000, #FF6200, #E03000);
+  }
+
+  .gradient-fire-bg {
+    background: linear-gradient(135deg, #FFD000, #FF6200, #E03000);
+  }
+
+  .gradient-fire-border {
+    position: relative;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .gradient-fire-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, #FFD000, #FF6200, #E03000);
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* ============================================================
+     📝 TYPOGRAPHY UTILITIES
+     ============================================================ */
+  .text-heading {
+    @apply font-heading uppercase tracking-wider;
+  }
+
+  .text-accent {
+    @apply font-accent italic;
+  }
+
+  .text-body-sm {
+    @apply font-body text-sm text-white-muted;
+  }
+
+  .text-body-xs {
+    @apply font-body text-xs text-white-dim;
+  }
+
+  /* ============================================================
+     🎯 INTERACTIVE STATES
+     ============================================================ */
+  .interactive {
+    @apply transition-all duration-200 cursor-pointer;
+  }
+
+  .interactive:hover {
+    @apply brightness-110;
+  }
+
+  .interactive:active {
+    @apply scale-[0.98];
+  }
+
+  /* ============================================================
+     📏 LAYOUT UTILITIES
+     ============================================================ */
+  .page-container {
+    @apply px-4 py-6 max-w-7xl mx-auto;
+  }
+
+  @media (min-width: 768px) {
+    .page-container {
+      @apply px-6 py-8;
+    }
+  }
+
+  .page-title {
+    @apply text-heading text-display-md text-white mb-2;
+  }
+
+  .page-subtitle {
+    @apply text-body-sm mb-6;
+  }
+
+  /* ============================================================
+     ✨ ANIMATION UTILITIES
+     ============================================================ */
+  .animate-in {
+    @apply animate-fade-in;
+  }
+
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep scroll behavior */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Line clamp */
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
