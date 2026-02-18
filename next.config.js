@@ -2,6 +2,7 @@
 const nextConfig = {
     // 🔗 Sous-dossier pour intégration avec magicienpro.fr
     basePath: '/dojo',
+    trailingSlash: true,
 
     reactStrictMode: true,
 
@@ -35,6 +36,11 @@ const nextConfig = {
                     {
                         key: 'Permissions-Policy',
                         value: 'camera=(), microphone=(), geolocation=(), payment=()',
+                    },
+                    // No-Index (Expert SEO — P0)
+                    {
+                        key: 'X-Robots-Tag',
+                        value: 'noindex, nofollow',
                     },
                     // Content Security Policy
                     {
