@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils/cn";
 import { navigationConfig } from "@/config/site-config";
 import { Avatar } from "@/components/ui/avatar";
 import { mockData } from "@/config/site-config";
+import { Profile } from "@/hooks/types";
 import {
     BookOpen,
     Flame,
@@ -27,9 +28,10 @@ const iconMap: Record<string, React.FC<{ className?: string }>> = {
 interface SidebarProps {
     collapsed: boolean;
     onToggle: () => void;
+    profile: Profile | null;
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, profile }: SidebarProps) {
     const pathname = usePathname();
 
     return (
@@ -102,16 +104,17 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 {!collapsed && (
                     <div className="flex items-center gap-3 mb-3 px-1">
                         <Avatar
-                            fallback={mockData.user.username}
+                            fallback={profile?.username || mockData.user.username}
+                            src={profile?.avatar_url || undefined}
                             size="sm"
-                            level={mockData.user.level}
+                            level={profile?.level ?? 1}
                         />
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-white truncate">
-                                {mockData.user.username}
+                                {profile?.username || mockData.user.username}
                             </p>
                             <p className="text-xs text-white-dim">
-                                {mockData.user.totalXp.toLocaleString()} XP
+                                {(profile?.total_xp ?? 0).toLocaleString()} XP
                             </p>
                         </div>
                     </div>

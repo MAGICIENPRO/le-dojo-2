@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils/cn";
 import { Sidebar } from "./sidebar";
 import { MobileNav } from "./mobile-nav";
 import { Topbar } from "./topbar";
+import { useUserProfile } from "@/hooks/use-user-profile";
 
 interface DashboardLayoutProps {
     children: ReactNode;
@@ -12,6 +13,7 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const { profile } = useUserProfile();
 
     return (
         <div className="min-h-screen bg-black-base">
@@ -19,10 +21,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <Sidebar
                 collapsed={sidebarCollapsed}
                 onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+                profile={profile}
             />
 
             {/* Topbar */}
-            <Topbar sidebarCollapsed={sidebarCollapsed} />
+            <Topbar
+                sidebarCollapsed={sidebarCollapsed}
+                profile={profile}
+            />
 
             {/* Main Content */}
             <main
