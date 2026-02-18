@@ -17,28 +17,52 @@ export default function CoachPage() {
     const [quotaRemaining, setQuotaRemaining] = useState(20);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Initial load
+    // Initial load and LocalStorage sync
     useEffect(() => {
-        async function fetchHistory() {
+        async function initChat() {
             try {
+                // 1. Load from DB
                 const res = await fetch("/dojo/api/ai/chat");
+                let dbMessages: ChatMessage[] = [];
                 if (res.ok) {
                     const data = await res.json();
-                    setMessages(data.messages.map((m: any) => ({
+                    dbMessages = data.messages.map((m: any) => ({
                         id: m.id,
                         role: m.role,
                         content: m.content
-                    })));
+                    }));
                     setQuotaRemaining(data.remaining);
                 }
+
+                // 2. Merge with LocalStorage (detect unsaved)
+                const local = localStorage.getItem("dojo_chat_cache");
+                if (local) {
+                    const localMsgs = JSON.parse(local);
+                    // Simple merge: if local has more messages, keep them (user might have just sent something)
+                    if (localMsgs.length > dbMessages.length) {
+                        setMessages(localMsgs);
+                    } else {
+                        setMessages(dbMessages);
+                    }
+                } else {
+                    setMessages(dbMessages);
+                }
+
             } catch (error) {
-                console.error("Failed to load history:", error);
+                console.error("Failed to load chat:", error);
             } finally {
                 setIsLoading(false);
             }
         }
-        fetchHistory();
+        initChat();
     }, []);
+
+    // Persist to local storage on setiap update
+    useEffect(() => {
+        if (messages.length > 0) {
+            localStorage.setItem("dojo_chat_cache", JSON.stringify(messages));
+        }
+    }, [messages]);
 
     const handleSendMessage = useCallback(async (content: string) => {
         if (quotaRemaining <= 0) {
@@ -60,7 +84,6 @@ export default function CoachPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    // Send only the last 10 messages to avoid token overflow
                     messages: [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content }))
                 }),
             });
@@ -70,7 +93,6 @@ export default function CoachPage() {
                 throw new Error(error.error || "Failed to get AI response");
             }
 
-            // Update remaining quota from header
             const remaining = response.headers.get("X-AI-Remaining");
             if (remaining !== null) {
                 setQuotaRemaining(parseInt(remaining));
@@ -81,12 +103,7 @@ export default function CoachPage() {
             if (!reader) throw new Error("No reader available");
 
             const aiMsgId = `msg-${Date.now()}-ai`;
-            const aiMsg: ChatMessage = {
-                id: aiMsgId,
-                role: "assistant",
-                content: "",
-            };
-            setMessages((prev) => [...prev, aiMsg]);
+            setMessages((prev) => [...prev, { id: aiMsgId, role: "assistant", content: "" }]);
             setIsTyping(false);
 
             const decoder = new TextDecoder();

@@ -56,10 +56,12 @@
 │       ├── library/              # Bibliothèque de tours
 │       │   ├── trick-card.tsx
 │       │   ├── kanban-board.tsx
-│       │   └── filter-bar.tsx
+│       │   ├── filter-bar.tsx
+│       │   └── trick-detail-modal.tsx # Détails + édition Supabase
 │       ├── training/             # Entraînement
 │       │   ├── tsvp-stepper.tsx
-│       │   └── session-summary.tsx
+│       │   ├── session-summary.tsx
+│       │   └── training-client.tsx    # Logique métier entraînement
 │       ├── gamification/         # Gamification 🔥
 │       │   ├── xp-level-display.tsx      # Barre XP / niveau
 │       │   ├── streak-display.tsx        # Affichage streak
@@ -76,13 +78,23 @@
 │           └── chat-interface.tsx
 │
 ├── config/
-│   └── site-config.ts            # Source de vérité centrale
+│   └── site-config.ts            # Source de vérité centrale (textes, config)
+│
+├── hooks/                        # Couche d'accès aux données Supabase
+│   ├── use-user-profile.ts       # Profil + Niveau + Stats
+│   ├── use-tricks.ts             # CRUD Tours
+│   ├── use-training-sessions.ts  # Logique XP + Sessions
+│   ├── use-achievements.ts       # Badges
+│   ├── use-gamification.ts       # Roue + Progression
+│   └── types.ts                  # Définitions TypeScript
 │
 ├── lib/
-│   └── utils/cn.ts               # Merge classes Tailwind
+│   ├── supabase/                 # Clients browser/server
+│   ├── ai/                       # Bridge Mistral + Quota manager
+│   └── utils/cn.ts               # Utilitaires
 │
-├── tailwind.config.ts            # Tokens design (couleurs, fonts, animations)
-└── package.json                  # Dépendances
+├── tailwind.config.ts            # Palette "Magma" + Animations
+└── package.json                  # Dépendances (@dnd-kit intégré)
 ```
 
 > ★ = Composants Premium Phase 7 (Framer Motion)

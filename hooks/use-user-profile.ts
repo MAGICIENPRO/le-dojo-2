@@ -12,37 +12,37 @@ export function useUserProfile() {
     const [error, setError] = useState<Error | null>(null)
     const supabase = createClient()
 
-    useEffect(() => {
-        async function fetchProfile() {
-            try {
-                setLoading(true)
-                const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const fetchProfile = async () => {
+        try {
+            setLoading(true)
+            const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
 
-                if (authError) throw authError
-                if (!user) {
-                    setLoading(false)
-                    return
-                }
-
-                setUser(user)
-
-                const { data, error: profileError } = await supabase
-                    .from("profiles")
-                    .select("*")
-                    .eq("id", user.id)
-                    .single()
-
-                if (profileError) throw profileError
-
-                setProfile(data as Profile)
-            } catch (err) {
-                console.error("Error fetching profile:", err)
-                setError(err instanceof Error ? err : new Error("Unknown error"))
-            } finally {
+            if (authError) throw authError
+            if (!authUser) {
                 setLoading(false)
+                return
             }
-        }
 
+            setUser(authUser)
+
+            const { data, error: profileError } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("id", authUser.id)
+                .single()
+
+            if (profileError) throw profileError
+
+            setProfile(data as Profile)
+        } catch (err) {
+            console.error("Error fetching profile:", err)
+            setError(err instanceof Error ? err : new Error("Unknown error"))
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
         fetchProfile()
     }, [])
 
@@ -73,6 +73,7 @@ export function useUserProfile() {
         profile,
         loading,
         error,
-        updateProfile
+        updateProfile,
+        refreshProfile: fetchProfile
     }
 }

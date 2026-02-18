@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // 3. Save user message
+        // 3. Save user message immediately
         const lastUserMessage = messages[messages.length - 1];
         await saveMessage(user.id, "user", lastUserMessage.content, conversationId);
 
@@ -44,46 +44,56 @@ export async function POST(req: NextRequest) {
             throw new Error("Failed to get stream from Mistral");
         }
 
-        // 5. Create a transform stream to capture the full response for logging
+        // 5. Create a smarter transform stream
         const encoder = new TextEncoder();
         const decoder = new TextDecoder();
-        let fullContent = "";
+        let assistantContent = "";
 
         const transformStream = new TransformStream({
             async transform(chunk, controller) {
-                const text = decoder.decode(chunk);
-                const lines = text.split("\n").filter(line => line.trim() !== "");
+                const text = decoder.decode(chunk, { stream: true });
+                const lines = text.split("\n");
 
                 for (const line of lines) {
-                    if (line === "data: [DONE]") continue;
+                    if (!line.trim() || line === "data: [DONE]") continue;
+
                     if (line.startsWith("data: ")) {
                         try {
                             const data = JSON.parse(line.slice(6));
                             const content = data.choices[0]?.delta?.content || "";
-                            fullContent += content;
-                            controller.enqueue(encoder.encode(content));
+                            if (content) {
+                                assistantContent += content;
+                                controller.enqueue(encoder.encode(content));
+                            }
                         } catch (e) {
-                            console.error("Error parsing stream chunk:", e);
+                            // On ignore les erreurs de parsing sur des chunks partiels
                         }
+                    } else {
+                        // Support brut si pas de préfixe data:
+                        assistantContent += line;
+                        controller.enqueue(encoder.encode(line));
                     }
                 }
             },
             async flush() {
-                // 6. Save AI response and Increment quota at the end of the stream
-                try {
-                    await saveMessage(user.id, "assistant", fullContent, conversationId);
-                    await incrementQuota(user.id);
-                } catch (e) {
-                    console.error("Error saving terminal message or incrementing quota:", e);
+                // 6. Final save when stream ends
+                if (assistantContent.trim()) {
+                    try {
+                        await saveMessage(user.id, "assistant", assistantContent, conversationId);
+                        await incrementQuota(user.id);
+                    } catch (err) {
+                        console.error("Critical: Failed to save AI response:", err);
+                    }
                 }
             }
         });
 
+        // Decrement local quota for the UI header
         const newRemaining = remaining - 1;
 
-        return new Response(transformStream.readable as any, {
+        return new Response(transformStream.readable, {
             headers: {
-                "Content-Type": "text/event-stream",
+                "Content-Type": "text/plain; charset=utf-8",
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-AI-Remaining": newRemaining.toString()
@@ -93,7 +103,7 @@ export async function POST(req: NextRequest) {
     } catch (error: any) {
         console.error("AI Chat Route Error:", error);
         return NextResponse.json(
-            { error: "Une erreur est survenue lors de la communication avec le Coach." },
+            { error: "Le Coach Shiya est momentanément indisponible." },
             { status: 500 }
         );
     }

@@ -29,6 +29,10 @@ export const metadata: Metadata = {
         template: `%s | ${appConfig.name}`,
     },
     description: appConfig.description,
+    robots: {
+        index: false,
+        follow: false,
+    },
     openGraph: {
         title: appConfig.name,
         description: appConfig.description,

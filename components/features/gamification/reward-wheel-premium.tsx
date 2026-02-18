@@ -9,6 +9,7 @@ import { Gift } from "lucide-react";
 
 interface RewardWheelPremiumProps {
     onRewardWon?: (reward: typeof gamificationConfig.wheel.rewards[number]) => void;
+    onSpinRequest?: () => Promise<{ winnerIndex: number; reward: any } | null>;
     className?: string;
 }
 
@@ -21,7 +22,7 @@ const SEGMENT_COLORS = [
     { bg: "#FF9500", border: "#FFD000" },
 ];
 
-export function RewardWheelPremium({ onRewardWon, className }: RewardWheelPremiumProps) {
+export function RewardWheelPremium({ onRewardWon, onSpinRequest, className }: RewardWheelPremiumProps) {
     const [isSpinning, setIsSpinning] = useState(false);
     const [result, setResult] = useState<typeof gamificationConfig.wheel.rewards[number] | null>(null);
     const controls = useAnimation();
@@ -32,17 +33,27 @@ export function RewardWheelPremium({ onRewardWon, className }: RewardWheelPremiu
 
     const spin = async () => {
         if (isSpinning) return;
+
+        let winnerIndex = 0;
+        let serverReward = null;
+
+        if (onSpinRequest) {
+            const data = await onSpinRequest();
+            if (!data) return; // Erreur gérée par le parent
+            winnerIndex = data.winnerIndex;
+            serverReward = data.reward;
+        } else {
+            // Fallback mock (ancien comportement)
+            const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
+            let random = Math.random() * totalWeight;
+            for (let i = 0; i < rewards.length; i++) {
+                random -= rewards[i].weight;
+                if (random <= 0) { winnerIndex = i; break; }
+            }
+        }
+
         setIsSpinning(true);
         setResult(null);
-
-        // Weighted random
-        const totalWeight = rewards.reduce((sum, r) => sum + r.weight, 0);
-        let random = Math.random() * totalWeight;
-        let winnerIndex = 0;
-        for (let i = 0; i < rewards.length; i++) {
-            random -= rewards[i].weight;
-            if (random <= 0) { winnerIndex = i; break; }
-        }
 
         // Calculate target
         const targetAngle = 360 - (winnerIndex * segmentAngle + segmentAngle / 2);
@@ -59,8 +70,9 @@ export function RewardWheelPremium({ onRewardWon, className }: RewardWheelPremiu
         });
 
         setIsSpinning(false);
-        setResult(rewards[winnerIndex]);
-        onRewardWon?.(rewards[winnerIndex]);
+        const finalReward = serverReward || rewards[winnerIndex];
+        setResult(finalReward);
+        onRewardWon?.(finalReward);
     };
 
     return (

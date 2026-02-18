@@ -4,10 +4,11 @@ import { Avatar } from "@/components/ui/avatar";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Badge } from "@/components/ui/badge";
 import { XPLevelDisplay } from "@/components/features/gamification/xp-level-display";
+import { ProfileActions } from "@/components/features/profile/profile-actions";
 import { uiTexts, gamificationConfig, trickCategories } from "@/config/site-config";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Download, LogOut, Settings, Shield, Bell, ChevronRight } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 export default async function ProfilPage() {
     const supabase = createClient();
@@ -132,33 +133,11 @@ export default async function ProfilPage() {
                 </div>
             </Card>
 
-            {/* Settings links - UI Only for now */}
-            <div className="space-y-1 mb-6">
-                {[
-                    { icon: Settings, label: "Paramètres", href: "#" },
-                    { icon: Bell, label: "Notifications", href: "#" },
-                    { icon: Shield, label: "Confidentialité", href: "#" },
-                ].map((item) => (
-                    <button
-                        key={item.label}
-                        className="w-full flex items-center justify-between px-4 py-3 rounded-card text-sm text-white-muted hover:text-white hover:bg-white/5 transition-colors"
-                    >
-                        <div className="flex items-center gap-3">
-                            <item.icon className="h-4 w-4" />
-                            <span>{item.label}</span>
-                        </div>
-                        <ChevronRight className="h-4 w-4" />
-                    </button>
-                ))}
-            </div>
+            {/* Interactive Actions (Settings, Notifications, Privacy, Export) */}
+            <ProfileActions exportLabel={uiTexts.profile.exportButton} />
 
-            {/* Export + Logout */}
-            <div className="space-y-2">
-                <Button variant="secondary" className="w-full">
-                    <Download className="h-4 w-4" />
-                    {uiTexts.profile.exportButton}
-                </Button>
-
+            {/* Logout */}
+            <div className="mt-4">
                 <form action="/auth/signout" method="post">
                     <Button variant="danger" className="w-full" type="submit">
                         <LogOut className="h-4 w-4" />

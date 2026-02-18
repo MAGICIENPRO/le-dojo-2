@@ -6,6 +6,7 @@ import { GamificationProgress } from "./types"
 
 export function useGamification() {
     const [progress, setProgress] = useState<GamificationProgress | null>(null)
+    const [unlockedSkills, setUnlockedSkills] = useState<string[]>([])
     const [loading, setLoading] = useState(true)
     const supabase = createClient()
 
@@ -19,17 +20,16 @@ export function useGamification() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
-            const { data, error } = await supabase
-                .from("gamification_progress")
-                .select("*")
-                .eq("user_id", user.id)
-                .single()
+            const [progressRes, skillsRes] = await Promise.all([
+                supabase.from("gamification_progress").select("*").eq("user_id", user.id).single(),
+                supabase.from("user_skills").select("node_id").eq("user_id", user.id)
+            ])
 
-            if (error && error.code !== "PGRST116") { // Ignore 'user not found' in gamification table if not init yet
-                throw error
-            }
+            if (progressRes.error && progressRes.error.code !== "PGRST116") throw progressRes.error
+            if (skillsRes.error) throw skillsRes.error
 
-            setProgress(data as GamificationProgress)
+            setProgress(progressRes.data as GamificationProgress)
+            setUnlockedSkills(skillsRes.data?.map(s => s.node_id) || [])
         } catch (err) {
             console.error("Error fetching gamification progress:", err)
         } finally {
@@ -39,47 +39,72 @@ export function useGamification() {
 
     const spinWheel = async () => {
         try {
-            // Note: In a real app, logic for "winning" should be server-side (RPC)
-            // to prevent cheating. Here we implement the client-side trigger as requested.
-            // We assume the backend or a follow-up action would handle the random logic 
-            // if we were strictly following security best practices.
-            // For this task, we'll Decrement spins_available client-side and return a mock result
-            // or update the DB if we are to implement the logic here.
-
-            // Let's implement a basic update to decrement spin count.
             if (!progress || progress.wheel_spins_available <= 0) {
                 throw new Error("No spins available")
             }
 
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) throw new Error("No user")
+            const response = await fetch("/dojo/api/gamification/spin", {
+                method: "POST",
+            })
 
-            const newSpins = progress.wheel_spins_available - 1
-            const newTotal = (progress.total_wheel_spins || 0) + 1
+            const data = await response.json()
+            if (data.error) throw new Error(data.error)
 
-            const { data, error } = await supabase
-                .from("gamification_progress")
-                .update({
-                    wheel_spins_available: newSpins,
-                    total_wheel_spins: newTotal
-                })
-                .eq("user_id", user.id)
-                .select()
-                .single()
+            // On rafraîchit les données pour mettre à jour l'XP/spins sur l'UI
+            await Promise.all([
+                fetchProgress(),
+                // On peut aussi trigger useUserProfile via une autre méthode si besoin
+            ])
 
-            if (error) throw error
-            setProgress(data as GamificationProgress)
-
-            return { remainingSpins: newSpins }
+            return {
+                remainingSpins: data.remainingSpins,
+                reward: data.reward,
+                winnerIndex: data.winnerIndex
+            }
         } catch (err) {
             console.error("Error spinning wheel:", err)
             throw err
         }
     }
 
+    const unlockSkill = async (nodeId: string, xpCost: number) => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) throw new Error("No user")
+
+            // On vérifie l'XP via un fetch frais pour éviter la triche côté client (basique)
+            const { data: profile } = await supabase.from("profiles").select("total_xp").eq("id", user.id).single()
+            if (!profile || profile.total_xp < xpCost) throw new Error("XP insuffisant")
+
+            // 1. Débloquer le skill
+            const { error: skillErr } = await supabase
+                .from("user_skills")
+                .insert({ user_id: user.id, node_id: nodeId })
+
+            if (skillErr) throw skillErr
+
+            // 2. Déduire l'XP
+            const { error: xpErr } = await supabase
+                .from("profiles")
+                .update({ total_xp: profile.total_xp - xpCost })
+                .eq("id", user.id)
+
+            if (xpErr) throw xpErr
+
+            // Refresh total
+            await fetchProgress()
+            return true
+        } catch (err) {
+            console.error("Error unlocking skill:", err)
+            throw err
+        }
+    }
+
     return {
         progress,
+        unlockedSkills,
         spinWheel,
+        unlockSkill,
         loading,
         refreshGamification: fetchProgress
     }
