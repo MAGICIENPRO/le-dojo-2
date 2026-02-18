@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AuthLayout } from "@/components/layouts/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner"; // Assuming sonner is used based on common tech stack or I'll check components/ui
 
 export default function LoginPage() {
+    const router = useRouter();
     const [step, setStep] = useState<"email" | "code">("email");
     const [email, setEmail] = useState("");
     const [code, setCode] = useState("");
@@ -60,7 +62,7 @@ export default function LoginPage() {
         }
 
         toast.success("Bienvenue dans le Dojo !");
-        window.location.href = "/bibliotheque";
+        router.push("/bibliotheque");
     };
 
     return (
