@@ -32,19 +32,19 @@ export async function POST(req: NextRequest) {
         const lastUserMessage = messages[messages.length - 1];
         await saveMessage(user.id, "user", lastUserMessage.content, conversationId);
 
-        // 4. Get Mistral response (Streaming)
+        // 4. Get Mistral stream
         const mistralMessages = messages.map((m: any) => ({
             role: m.role,
             content: m.content
         }));
 
-        const stream = await getMistralResponse(mistralMessages, true);
+        const mistralStream = await getMistralResponse(mistralMessages, true);
 
-        if (!stream) {
+        if (!mistralStream) {
             throw new Error("Failed to get stream from Mistral");
         }
 
-        // 5. Create a smarter transform stream
+        // 5. Transform SSE stream → plain text stream
         const encoder = new TextEncoder();
         const decoder = new TextDecoder();
         let assistantContent = "";
@@ -60,23 +60,19 @@ export async function POST(req: NextRequest) {
                     if (line.startsWith("data: ")) {
                         try {
                             const data = JSON.parse(line.slice(6));
-                            const content = data.choices[0]?.delta?.content || "";
+                            const content = data.choices?.[0]?.delta?.content || "";
                             if (content) {
                                 assistantContent += content;
                                 controller.enqueue(encoder.encode(content));
                             }
-                        } catch (e) {
-                            // On ignore les erreurs de parsing sur des chunks partiels
+                        } catch {
+                            // Ignore partial JSON chunks
                         }
-                    } else {
-                        // Support brut si pas de préfixe data:
-                        assistantContent += line;
-                        controller.enqueue(encoder.encode(line));
                     }
                 }
             },
             async flush() {
-                // 6. Final save when stream ends
+                // Save complete response when stream ends
                 if (assistantContent.trim()) {
                     try {
                         await saveMessage(user.id, "assistant", assistantContent, conversationId);
@@ -88,7 +84,11 @@ export async function POST(req: NextRequest) {
             }
         });
 
-        // Decrement local quota for the UI header
+        // 6. Connect Mistral stream → TransformStream (THIS was the missing link)
+        mistralStream.pipeTo(transformStream.writable).catch((err: unknown) => {
+            console.error("Stream pipe error:", err);
+        });
+
         const newRemaining = remaining - 1;
 
         return new Response(transformStream.readable, {

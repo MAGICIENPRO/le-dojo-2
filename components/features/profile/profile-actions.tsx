@@ -8,7 +8,10 @@ import {
     ChevronRight,
     Download,
     X,
-    CheckCircle2
+    CheckCircle2,
+    FileJson,
+    FileText,
+    FileSpreadsheet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,26 +21,31 @@ interface ProfileActionsProps {
     exportLabel: string;
 }
 
+type ExportFormat = "json" | "csv" | "pdf";
+
 export function ProfileActions({ exportLabel }: ProfileActionsProps) {
-    const [activeModal, setActiveModal] = useState<"settings" | "notifications" | "privacy" | null>(null);
+    const [activeModal, setActiveModal] = useState<"settings" | "notifications" | "privacy" | "export" | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const { success, error } = useToast();
 
-    const handleExport = async () => {
+    const handleExport = async (format: ExportFormat) => {
         setIsExporting(true);
+        setActiveModal(null);
         try {
-            const res = await fetch("/dojo/api/user/export");
+            const res = await fetch(`/dojo/api/user/export?format=${format}`);
             if (!res.ok) throw new Error("Export failed");
 
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `dojo-export-${new Date().getTime()}.json`;
+            const ext = format === "csv" ? "csv" : format === "pdf" ? "pdf" : "json";
+            a.download = `dojo-export-${new Date().getTime()}.${ext}`;
             document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
-            success("Export réussi ! Tes données sont enregistrées.");
+            success(`Export ${format.toUpperCase()} réussi ! Tes données sont enregistrées.`);
         } catch (err) {
             error("Impossible d'exporter les données.");
         } finally {
@@ -50,6 +58,12 @@ export function ProfileActions({ exportLabel }: ProfileActionsProps) {
         { id: "notifications", icon: Bell, label: "Notifications" },
         { id: "privacy", icon: Shield, label: "Confidentialité" },
     ] as const;
+
+    const exportFormats: { format: ExportFormat; icon: typeof FileJson; label: string; desc: string }[] = [
+        { format: "json", icon: FileJson, label: "JSON", desc: "Données brutes complètes (développeurs)" },
+        { format: "csv", icon: FileSpreadsheet, label: "CSV", desc: "Tableau lisible dans Excel ou Sheets" },
+        { format: "pdf", icon: FileText, label: "PDF", desc: "Rapport lisible, idéal pour archiver" },
+    ];
 
     return (
         <>
@@ -73,7 +87,7 @@ export function ProfileActions({ exportLabel }: ProfileActionsProps) {
                 <Button
                     variant="secondary"
                     className="w-full"
-                    onClick={handleExport}
+                    onClick={() => setActiveModal("export")}
                     loading={isExporting}
                 >
                     <Download className="h-4 w-4" />
@@ -121,20 +135,45 @@ export function ProfileActions({ exportLabel }: ProfileActionsProps) {
                                 <div className="space-y-4">
                                     <h3 className="font-heading text-xl text-white">Confidentialité</h3>
                                     <div className="space-y-2 text-sm text-white-muted leading-relaxed">
-                                        <div className="flex gap-2 items-start">
-                                            <CheckCircle2 className="h-4 w-4 text-fire-orange shrink-0 mt-0.5" />
-                                            <p>Tes données sont stockées de manière sécurisée via Supabase.</p>
-                                        </div>
-                                        <div className="flex gap-2 items-start">
-                                            <CheckCircle2 className="h-4 w-4 text-fire-orange shrink-0 mt-0.5" />
-                                            <p>Aucune donnée n'est revendue à des tiers.</p>
-                                        </div>
-                                        <div className="flex gap-2 items-start">
-                                            <CheckCircle2 className="h-4 w-4 text-fire-orange shrink-0 mt-0.5" />
-                                            <p>Tu peux exporter ou demander la suppression de ton compte à tout moment.</p>
-                                        </div>
+                                        {[
+                                            "Tes données sont stockées de manière sécurisée via Supabase.",
+                                            "Aucune donnée n'est revendue à des tiers.",
+                                            "Tu peux exporter ou demander la suppression de ton compte à tout moment.",
+                                        ].map((text, i) => (
+                                            <div key={i} className="flex gap-2 items-start">
+                                                <CheckCircle2 className="h-4 w-4 text-fire-orange shrink-0 mt-0.5" />
+                                                <p>{text}</p>
+                                            </div>
+                                        ))}
                                     </div>
                                     <Button variant="primary" className="w-full" onClick={() => setActiveModal(null)}>Fermer</Button>
+                                </div>
+                            )}
+
+                            {activeModal === "export" && (
+                                <div className="space-y-4">
+                                    <div>
+                                        <h3 className="font-heading text-xl text-white">Exporter mes données</h3>
+                                        <p className="text-xs text-white-muted mt-1">Choisis le format qui te convient le mieux.</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {exportFormats.map(({ format, icon: Icon, label, desc }) => (
+                                            <button
+                                                key={format}
+                                                onClick={() => handleExport(format)}
+                                                className="w-full flex items-center gap-3 p-3 rounded-card border border-black-border hover:border-fire-orange/40 hover:bg-white/5 transition-all text-left group"
+                                            >
+                                                <div className="w-9 h-9 rounded-lg bg-fire-orange/10 flex items-center justify-center shrink-0 group-hover:bg-fire-orange/20 transition-colors">
+                                                    <Icon className="h-4 w-4 text-fire-orange" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-white">{label}</p>
+                                                    <p className="text-[11px] text-white-dim">{desc}</p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-white-dim text-center">Conformément au RGPD, tu as le droit d&apos;accéder à toutes tes données.</p>
                                 </div>
                             )}
                         </div>
