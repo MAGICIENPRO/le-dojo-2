@@ -7,30 +7,59 @@ import { Input } from "@/components/ui/input";
 import { uiTexts } from "@/config/site-config";
 import { Mail, ArrowRight, ArrowLeft } from "lucide-react";
 
+import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner"; // Assuming sonner is used based on common tech stack or I'll check components/ui
+
 export default function LoginPage() {
     const [step, setStep] = useState<"email" | "code">("email");
     const [email, setEmail] = useState("");
     const [code, setCode] = useState("");
     const [loading, setLoading] = useState(false);
+    const supabase = createClient();
 
     const handleSendEmail = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email.trim()) return;
         setLoading(true);
-        // Mock delay
-        await new Promise((r) => setTimeout(r, 1000));
+
+        const { error } = await supabase.auth.signInWithOtp({
+            email: email.trim(),
+            options: {
+                // Pour OTP par mail, on utilise email_otp
+                shouldCreateUser: true,
+            },
+        });
+
         setLoading(false);
+
+        if (error) {
+            toast.error(error.message);
+            console.error("Auth error:", error);
+            return;
+        }
+
         setStep("code");
+        toast.success("Code envoyé ! Vérifie ta boîte mail.");
     };
 
     const handleVerifyCode = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!code.trim()) return;
         setLoading(true);
-        // Mock delay — will redirect to dashboard
-        await new Promise((r) => setTimeout(r, 1000));
-        setLoading(false);
-        // In real app: router.push("/bibliotheque")
+
+        const { error } = await supabase.auth.verifyOtp({
+            email,
+            token: code,
+            type: "email",
+        });
+
+        if (error) {
+            setLoading(false);
+            toast.error("Code invalide ou expiré.");
+            return;
+        }
+
+        toast.success("Bienvenue dans le Dojo !");
         window.location.href = "/bibliotheque";
     };
 

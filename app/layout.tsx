@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bebas_Neue, Outfit, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { appConfig } from "@/config/site-config";
+import { Toaster } from "sonner";
 
 const bebas = Bebas_Neue({
     weight: "400",
@@ -50,6 +51,7 @@ export default function RootLayout({
         >
             <body className="bg-black-base text-white font-body antialiased">
                 {children}
+                <Toaster richColors position="bottom-right" theme="dark" />
             </body>
         </html>
     );
