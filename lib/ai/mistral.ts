@@ -5,6 +5,12 @@
 
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 
+/**
+ * Max messages to send as context to avoid token overflow.
+ * 20 messages ≈ ~4000 tokens (well under Mistral's limit).
+ */
+const MAX_HISTORY_MESSAGES = 20;
+
 export interface MistralMessage {
     role: "user" | "assistant" | "system";
     content: string;
@@ -37,7 +43,7 @@ export async function getMistralResponse(messages: MistralMessage[], stream: boo
             model: "mistral-small-latest",
             messages: [
                 { role: "system", content: SYSTEM_PROMPT },
-                ...messages
+                ...messages.slice(-MAX_HISTORY_MESSAGES)
             ],
             temperature: 0.7,
             max_tokens: 500,

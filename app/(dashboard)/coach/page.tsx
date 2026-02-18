@@ -60,7 +60,8 @@ export default function CoachPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+                    // Send only the last 10 messages to avoid token overflow
+                    messages: [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content }))
                 }),
             });
 
