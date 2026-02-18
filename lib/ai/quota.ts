@@ -6,10 +6,10 @@ const DAILY_QUOTA = 20;
  * Récupère le quota restant pour un utilisateur
  */
 export async function getRemainingQuota(userId: string) {
-    const supabase = createClient();
+    const supabase = await createClient(); // ✅ await manquant corrigé
     const today = new Date().toISOString().split('T')[0];
 
-    const { data, error } = await (await supabase)
+    const { data, error } = await supabase
         .from("ai_usage_log")
         .select("request_count")
         .eq("user_id", userId)
@@ -18,7 +18,7 @@ export async function getRemainingQuota(userId: string) {
 
     if (error && error.code !== "PGRST116") { // PGRST116 is "not found"
         console.error("Error fetching quota:", error);
-        return DAILY_QUOTA;
+        return DAILY_QUOTA; // Fail open: allow if DB error
     }
 
     const count = data?.request_count || 0;
@@ -29,11 +29,11 @@ export async function getRemainingQuota(userId: string) {
  * Incrémente le quota pour un utilisateur
  */
 export async function incrementQuota(userId: string) {
-    const supabase = createClient();
+    const supabase = await createClient(); // ✅ await manquant corrigé
     const today = new Date().toISOString().split('T')[0];
 
     // Upsert logic: insert if not exists, increment if exists
-    const { data: current } = await (await supabase)
+    const { data: current } = await supabase
         .from("ai_usage_log")
         .select("request_count")
         .eq("user_id", userId)
@@ -41,13 +41,13 @@ export async function incrementQuota(userId: string) {
         .single();
 
     if (!current) {
-        await (await supabase).from("ai_usage_log").insert({
+        await supabase.from("ai_usage_log").insert({
             user_id: userId,
             usage_date: today,
             request_count: 1
         });
     } else {
-        await (await supabase)
+        await supabase
             .from("ai_usage_log")
             .update({ request_count: current.request_count + 1 })
             .eq("user_id", userId)
@@ -59,9 +59,9 @@ export async function incrementQuota(userId: string) {
  * Sauvegarde un message dans l'historique
  */
 export async function saveMessage(userId: string, role: "user" | "assistant", content: string, conversationId?: string) {
-    const supabase = createClient();
+    const supabase = await createClient(); // ✅ await manquant corrigé
 
-    await (await supabase).from("ai_chat_messages").insert({
+    await supabase.from("ai_chat_messages").insert({
         user_id: userId,
         role: role,
         content: content,
@@ -74,9 +74,9 @@ export async function saveMessage(userId: string, role: "user" | "assistant", co
  * Récupère l'historique des messages
  */
 export async function getChatHistory(userId: string) {
-    const supabase = createClient();
+    const supabase = await createClient(); // ✅ await manquant corrigé
 
-    const { data, error } = await (await supabase)
+    const { data, error } = await supabase
         .from("ai_chat_messages")
         .select("*")
         .eq("user_id", userId)
@@ -94,7 +94,8 @@ export async function getChatHistory(userId: string) {
 /**
  * Vérifie à la fois le budget global et le quota utilisateur (Circuit-Breaker)
  */
-export async function checkAiBudgetAndQuota(supabase: any, userId: string) {
+export async function checkAiBudgetAndQuota(userId: string) {
+    const supabase = await createClient(); // ✅ await manquant corrigé
     const today = new Date().toISOString().split('T')[0];
     const GLOBAL_MAX = parseInt(process.env.AI_DAILY_GLOBAL_MAX_REQUESTS || "5000");
 
