@@ -90,3 +90,48 @@ export async function getChatHistory(userId: string) {
 
     return data;
 }
+
+/**
+ * Vérifie à la fois le budget global et le quota utilisateur (Circuit-Breaker)
+ */
+export async function checkAiBudgetAndQuota(supabase: any, userId: string) {
+    const today = new Date().toISOString().split('T')[0];
+    const GLOBAL_MAX = parseInt(process.env.AI_DAILY_GLOBAL_MAX_REQUESTS || "5000");
+
+    // 1. Vérification Budget Global
+    const { data: globalUsage } = await supabase
+        .from("ai_usage_log")
+        .select("request_count")
+        .eq("usage_date", today);
+
+    const totalRequests = globalUsage?.reduce((acc: number, curr: any) => acc + curr.request_count, 0) || 0;
+
+    if (totalRequests >= GLOBAL_MAX) {
+        return {
+            allowed: false,
+            error: "Budget global IA atteint (Circuit-Breaker activé).",
+            remaining: 0
+        };
+    }
+
+    // 2. Vérification Quota Utilisateur
+    const { data: userUsage } = await supabase
+        .from("ai_usage_log")
+        .select("request_count")
+        .eq("user_id", userId)
+        .eq("usage_date", today)
+        .single();
+
+    const currentCount = userUsage?.request_count || 0;
+    const remaining = Math.max(0, 20 - currentCount); // DAILY_QUOTA is 20
+
+    if (remaining <= 0) {
+        return {
+            allowed: false,
+            error: "Ton quota quotidien est atteint. Reviens demain ! 🔥",
+            remaining: 0
+        };
+    }
+
+    return { allowed: true, remaining };
+}

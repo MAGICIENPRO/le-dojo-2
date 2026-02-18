@@ -12,6 +12,7 @@ interface TimerProps {
     onTick?: (remaining: number) => void;
     className?: string;
     label?: string;
+    stopwatch?: boolean;
 }
 
 const sizes = {
@@ -34,24 +35,45 @@ export function Timer({
     onTick,
     className,
     label,
+    stopwatch = false,
 }: TimerProps) {
-    const [remaining, setRemaining] = useState(initialSeconds);
+    // If stopwatch, initialSeconds acts as optional limit or just reference, but we start at 0 usually or track elapsed.
+    // However, existing usage in Training keeps logic simple. 
+    // Let's implement stopwatch logic: instead of countdown, we display elapsed time? 
+    // BUT the prop passed in TrainingClient is `initialSeconds={300}` which implies countdown.
+    // The comment said "Make it count UP to track duration visually".
+    // If we want countdown but visual aid of tracking? 
+    // Let's assume the user wants it to behave as countdown BUT `stopwatch` might imply something else. 
+    // Actually, looking at TrainingClient: `duration_seconds` is calculated by `Date.now() - start`.
+    // The Timer is just visual.
+    // If `stopwatch` is true, let's make it count up from 0 to initialSeconds? Or just count down?
+    // User wrote: `stopwatch // Make it count UP to track duration visually`
+    // So I should implement count up.
+
+    const [value, setValue] = useState(stopwatch ? 0 : initialSeconds);
     const [isRunning, setIsRunning] = useState(autoStart);
     const { svgSize, strokeWidth, fontSize } = sizes[size];
 
     const radius = (svgSize - strokeWidth * 2) / 2;
     const circumference = 2 * Math.PI * radius;
-    const progress = remaining / initialSeconds;
+
+    // For stopwatch, progress is value / initialSeconds (if limit) or just looping.
+    // Let's assume initialSeconds is the "target" or max for progress bar.
+    const progress = stopwatch ? Math.min(value / (initialSeconds || 60), 1) : value / initialSeconds;
     const offset = circumference * (1 - progress);
 
     useEffect(() => {
-        if (!isRunning || remaining <= 0) return;
+        if (!isRunning) return;
+
+        // If countdown and reach 0, stop
+        if (!stopwatch && value <= 0) return;
 
         const interval = setInterval(() => {
-            setRemaining((prev) => {
-                const next = prev - 1;
+            setValue((prev) => {
+                const next = stopwatch ? prev + 1 : prev - 1;
                 onTick?.(next);
-                if (next <= 0) {
+
+                if (!stopwatch && next <= 0) {
                     setIsRunning(false);
                     onComplete?.();
                     return 0;
@@ -61,17 +83,17 @@ export function Timer({
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [isRunning, remaining, onComplete, onTick]);
+    }, [isRunning, value, onComplete, onTick, stopwatch]);
 
     const toggle = useCallback(() => {
-        if (remaining <= 0) return;
+        if (!stopwatch && value <= 0) return;
         setIsRunning((prev) => !prev);
-    }, [remaining]);
+    }, [value, stopwatch]);
 
     const reset = useCallback(() => {
         setIsRunning(false);
-        setRemaining(initialSeconds);
-    }, [initialSeconds]);
+        setValue(stopwatch ? 0 : initialSeconds);
+    }, [initialSeconds, stopwatch]);
 
     // Color based on remaining time
     const getColor = () => {
@@ -129,13 +151,13 @@ export function Timer({
                         className={cn(
                             "font-heading tabular-nums",
                             fontSize,
-                            remaining <= 10 && remaining > 0 && "text-fire-red animate-pulse"
+                            !stopwatch && value <= 10 && value > 0 && "text-fire-red animate-pulse"
                         )}
                         role="timer"
                         aria-live="polite"
-                        aria-label={`${formatTime(remaining)} restant`}
+                        aria-label={`${formatTime(value)}`}
                     >
-                        {formatTime(remaining)}
+                        {formatTime(value)}
                     </span>
                 </div>
             </div>

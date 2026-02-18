@@ -9,6 +9,7 @@ import { Gift } from "lucide-react";
 interface RewardWheelProps {
     onRewardWon?: (reward: typeof gamificationConfig.wheel.rewards[number]) => void;
     className?: string;
+    spinsAvailable?: number;
 }
 
 const SEGMENT_COLORS = [
@@ -20,7 +21,7 @@ const SEGMENT_COLORS = [
     "#FF9500",
 ];
 
-export function RewardWheel({ onRewardWon, className }: RewardWheelProps) {
+export function RewardWheel({ onRewardWon, className, spinsAvailable = 0 }: RewardWheelProps) {
     const [isSpinning, setIsSpinning] = useState(false);
     const [result, setResult] = useState<string | null>(null);
     const wheelRef = useRef<HTMLDivElement>(null);
