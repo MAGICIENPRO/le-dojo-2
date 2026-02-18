@@ -42,9 +42,9 @@ export default function LoginPage() {
         toast.success("Code envoyé ! Vérifie ta boîte mail.");
     };
 
-    const handleVerifyCode = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!code.trim()) return;
+    const handleVerifyCode = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (code.length < 6) return; // Accepter 6 ou 8 (typique Supabase)
         setLoading(true);
 
         const { error } = await supabase.auth.verifyOtp({
@@ -120,9 +120,9 @@ export default function LoginPage() {
                         type="text"
                         placeholder="000000"
                         value={code}
-                        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
                         className="text-center text-2xl tracking-[0.5em] font-heading"
-                        maxLength={6}
+                        maxLength={8}
                         autoFocus
                     />
 
