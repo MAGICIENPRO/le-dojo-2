@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ChatInterface } from "@/components/features/coach/chat-interface";
-import { uiTexts, mockData } from "@/config/site-config";
+import { uiTexts } from "@/config/site-config";
+import { toast } from "sonner";
 
 interface ChatMessage {
     id: string;
@@ -11,32 +12,107 @@ interface ChatMessage {
 }
 
 export default function CoachPage() {
-    const [messages, setMessages] = useState<ChatMessage[]>([...mockData.chatMessages] as ChatMessage[]);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isTyping, setIsTyping] = useState(false);
     const [quotaRemaining, setQuotaRemaining] = useState(20);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const handleSendMessage = useCallback((content: string) => {
-        // Add user message
-        const userMsg = {
+    // Initial load
+    useEffect(() => {
+        async function fetchHistory() {
+            try {
+                const res = await fetch("/dojo/api/ai/chat");
+                if (res.ok) {
+                    const data = await res.json();
+                    setMessages(data.messages.map((m: any) => ({
+                        id: m.id,
+                        role: m.role,
+                        content: m.content
+                    })));
+                    setQuotaRemaining(data.remaining);
+                }
+            } catch (error) {
+                console.error("Failed to load history:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        fetchHistory();
+    }, []);
+
+    const handleSendMessage = useCallback(async (content: string) => {
+        if (quotaRemaining <= 0) {
+            toast.error("Ton quota quotidien est atteint. Reviens demain ! 🔥");
+            return;
+        }
+
+        const userMsg: ChatMessage = {
             id: `msg-${Date.now()}`,
-            role: "user" as const,
+            role: "user",
             content,
         };
+
         setMessages((prev) => [...prev, userMsg]);
-        setQuotaRemaining((prev) => Math.max(0, prev - 1));
         setIsTyping(true);
 
-        // Simulate AI response
-        setTimeout(() => {
-            const aiMsg = {
-                id: `msg-${Date.now()}-ai`,
-                role: "assistant" as const,
-                content: getAIResponse(content),
+        try {
+            const response = await fetch("/dojo/api/ai/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || "Failed to get AI response");
+            }
+
+            // Update remaining quota from header
+            const remaining = response.headers.get("X-AI-Remaining");
+            if (remaining !== null) {
+                setQuotaRemaining(parseInt(remaining));
+            }
+
+            // Handle streaming
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error("No reader available");
+
+            const aiMsgId = `msg-${Date.now()}-ai`;
+            const aiMsg: ChatMessage = {
+                id: aiMsgId,
+                role: "assistant",
+                content: "",
             };
             setMessages((prev) => [...prev, aiMsg]);
             setIsTyping(false);
-        }, 1500 + Math.random() * 1000);
-    }, []);
+
+            const decoder = new TextDecoder();
+            let accumulatedContent = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                accumulatedContent += chunk;
+
+                setMessages((prev) =>
+                    prev.map(m => m.id === aiMsgId ? { ...m, content: accumulatedContent } : m)
+                );
+            }
+
+        } catch (error: any) {
+            console.error("Chat Error:", error);
+            toast.error(error.message || "Shiya a eu un trou de mémoire...");
+            setIsTyping(false);
+        }
+    }, [messages, quotaRemaining]);
+
+    if (isLoading) {
+        return <div className="h-screen flex items-center justify-center bg-black-base text-white">Prépare la forge... 🔥</div>;
+    }
 
     return (
         <div className="h-[calc(100vh-var(--topbar-height)-var(--mobile-nav-height))] md:h-[calc(100vh-var(--topbar-height))]">
@@ -50,15 +126,4 @@ export default function CoachPage() {
             />
         </div>
     );
-}
-
-// Mock AI responses
-function getAIResponse(question: string): string {
-    const responses = [
-        "Excellente question ! 🔥\n\nVoici mon analyse :\n\n1. **Commence par le Thunder Silence** — Après chaque phase clé, laisse 2-3 secondes de silence total. C'est dans ce silence que la magie opère dans l'esprit du spectateur.\n\n2. **Travaille ta Courbe Cardiaque** — Structure ton effet en crescendo. Commence doucement, puis accélère l'intensité.\n\n3. **L'Empreinte** — Termine toujours par quelque chose que le spectateur garde (physiquement ou mentalement).\n\nTu veux qu'on creuse un de ces points ?",
-        "Je vois ce que tu veux dire ! 💡\n\nLe problème vient souvent du **rythme**. Voici un exercice :\n\n1. Filme-toi en train de performer le tour\n2. Regarde la vidéo **sans le son** — focus sur tes gestes\n3. Écoute la vidéo **sans l'image** — focus sur ton texte\n4. Les deux doivent fonctionner indépendamment\n\nSi un des deux ne tient pas tout seul, c'est là qu'il faut travailler. 🎯",
-        "Bonne réflexion ! 🧠\n\nPour gérer un spectateur difficile, rappelle-toi la règle d'or :\n\n**\"Celui qui contrôle le cadre contrôle la magie.\"**\n\n→ Ne combat jamais frontalement\n→ Utilise l'humour pour désamorcer\n→ Transforme la résistance en complicité\n→ En dernier recours, implique physiquement la personne (elle devient ton assistante)\n\nC'est du judo verbal : utilise la force de l'autre pour servir ta magie. ✨",
-    ];
-
-    return responses[Math.floor(Math.random() * responses.length)];
 }

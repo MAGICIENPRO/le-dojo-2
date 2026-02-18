@@ -1,6 +1,6 @@
 # 📂 STRUCTURE.md — Le Dojo 2.0 Frontend
 
-> **Dernière mise à jour** : Phase 7 terminée
+> **Dernière mise à jour** : Phase 8 - Connexion Supabase Navigation terminée
 > **Stack** : Next.js 14 · Tailwind CSS · Framer Motion
 > **Build** : ✅ 0 erreurs
 

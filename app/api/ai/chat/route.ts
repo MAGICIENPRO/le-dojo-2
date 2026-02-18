@@ -1,93 +1,134 @@
-import { mistral } from "@ai-sdk/mistral";
-import { streamText } from "ai";
-import { createClient } from "@/lib/supabase/server";
-import { checkAiBudgetAndQuota } from "@/lib/ai/quota";
 import { NextRequest, NextResponse } from "next/server";
-
-export const runtime = "edge";
+import { createClient } from "@/lib/supabase/server";
+import { getMistralResponse } from "@/lib/ai/mistral";
+import { getRemainingQuota, incrementQuota, saveMessage } from "@/lib/ai/quota";
 
 export async function POST(req: NextRequest) {
+    const supabase = await createClient();
+
+    // 1. Auth check
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     try {
-        // ━━━━ 1. AUTHENTIFICATION ━━━━
-        const supabase = createClient();
-        const {
-            data: { user },
-            error: authError,
-        } = await supabase.auth.getUser();
+        const { messages, conversationId } = await req.json();
 
-        if (authError || !user) {
+        if (!messages || !Array.isArray(messages)) {
+            return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
+        }
+
+        // 2. Quota check
+        const remaining = await getRemainingQuota(user.id);
+        if (remaining <= 0) {
             return NextResponse.json(
-                { error: "UNAUTHORIZED", message: "Tu dois être connecté pour parler au Coach." },
-                { status: 401 }
+                { error: "Quota journalier atteint. Reviens demain ! 🔥" },
+                { status: 429, headers: { "X-AI-Remaining": "0" } }
             );
         }
 
-        // ━━━━ 2. VALIDATION ━━━━
-        const { message } = await req.json();
+        // 3. Save user message
+        const lastUserMessage = messages[messages.length - 1];
+        await saveMessage(user.id, "user", lastUserMessage.content, conversationId);
 
-        if (!message || typeof message !== "string" || message.trim().length === 0) {
-            return NextResponse.json(
-                { error: "VALIDATION_ERROR", message: "Message vide." },
-                { status: 422 }
-            );
+        // 4. Get Mistral response (Streaming)
+        const mistralMessages = messages.map((m: any) => ({
+            role: m.role,
+            content: m.content
+        }));
+
+        const stream = await getMistralResponse(mistralMessages, true);
+
+        if (!stream) {
+            throw new Error("Failed to get stream from Mistral");
         }
 
-        // ━━━━ 3. BUDGET & QUOTA CHECK (Circuit-Breaker) ━━━━
-        const quotaResult = await checkAiBudgetAndQuota(supabase, user.id);
+        // 5. Create a transform stream to capture the full response for logging
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        let fullContent = "";
 
-        if (!quotaResult.allowed) {
-            if (quotaResult.error === "BUDGET_EXCEEDED") {
-                return NextResponse.json(
-                    {
-                        error: "SERVICE_UNAVAILABLE",
-                        message: "Le Coach est temporairement en maintenance pour cause de forte affluence. Il revient très vite !",
-                    },
-                    {
-                        status: 503,
-                        headers: { "Retry-After": "3600" }
+        const transformStream = new TransformStream({
+            async transform(chunk, controller) {
+                const text = decoder.decode(chunk);
+                const lines = text.split("\n").filter(line => line.trim() !== "");
+
+                for (const line of lines) {
+                    if (line === "data: [DONE]") continue;
+                    if (line.startsWith("data: ")) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            const content = data.choices[0]?.delta?.content || "";
+                            fullContent += content;
+                            controller.enqueue(encoder.encode(content));
+                        } catch (e) {
+                            console.error("Error parsing stream chunk:", e);
+                        }
                     }
-                );
+                }
+            },
+            async flush() {
+                // 6. Save AI response and Increment quota at the end of the stream
+                try {
+                    await saveMessage(user.id, "assistant", fullContent, conversationId);
+                    await incrementQuota(user.id);
+                } catch (e) {
+                    console.error("Error saving terminal message or incrementing quota:", e);
+                }
             }
-
-            return NextResponse.json(
-                {
-                    error: "QUOTA_EXCEEDED",
-                    message: "Tu as utilisé tes 20 messages d'aujourd'hui. Le Coach revient demain à minuit !",
-                    resetAt: quotaResult.resetAt,
-                },
-                { status: 429 }
-            );
-        }
-
-        // ━━━━ 4. APPEL LLM (STREAMING) ━━━━
-        // Note: Pour une implémentation complète, nous devrions ici injecter 
-        // le RAG et le System Prompt. Pour cet exercice, nous nous concentrons 
-        // sur le circuit-breaker budgétaire.
-
-        const result = streamText({
-            model: mistral("mistral-small-latest"),
-            system: "Tu es le Coach du Dojo, un assistant expert en magie. Tu aides l'utilisateur à progresser via la méthode M.A.G.I.E. de Sébastien Pieta.",
-            messages: [{ role: "user", content: message }],
-            maxTokens: 1024,
-            temperature: 0.7,
         });
 
-        // ━━━━ 5. RÉPONSE AVEC HEADERS DE QUOTA ━━━━
-        return result.toDataStreamResponse({
+        const newRemaining = remaining - 1;
+
+        return new Response(transformStream.readable as any, {
             headers: {
-                "X-AI-Remaining": String(quotaResult.remaining),
-                "X-Quota-Reset-At": quotaResult.resetAt,
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-AI-Remaining": newRemaining.toString()
             },
         });
 
-    } catch (error) {
-        console.error("[AI Chat Error]", error);
+    } catch (error: any) {
+        console.error("AI Chat Route Error:", error);
         return NextResponse.json(
-            {
-                error: "INTERNAL_ERROR",
-                message: "Oups, le Coach a un souci technique. Réessaie dans quelques minutes.",
-            },
+            { error: "Une erreur est survenue lors de la communication avec le Coach." },
             { status: 500 }
         );
     }
+}
+
+/**
+ * Charger les messages existants
+ */
+export async function GET(req: NextRequest) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: messages, error } = await supabase
+        .from("ai_chat_messages")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+    const remaining = await getRemainingQuota(user.id);
+
+    if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json(
+        { messages, remaining },
+        {
+            headers: {
+                "X-AI-Remaining": remaining.toString()
+            }
+        }
+    );
 }

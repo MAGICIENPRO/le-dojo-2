@@ -1,78 +1,92 @@
-import { SupabaseClient } from "@supabase/supabase-js";
-import { aiCoachConfig } from "@/config/site-config";
+import { createClient } from "@/lib/supabase/server";
 
-interface QuotaResult {
-    allowed: boolean;
-    remaining: number;
-    resetAt: string;
-    error?: "BUDGET_EXCEEDED" | "QUOTA_EXCEEDED";
-}
+const DAILY_QUOTA = 20;
 
-export async function checkAiBudgetAndQuota(
-    supabase: SupabaseClient,
-    userId: string
-): Promise<QuotaResult> {
-    const today = new Date().toISOString().split("T")[0];
-    const userLimit = aiCoachConfig.maxFreeRequestsPerDay || 20;
-    const globalLimit = 5000; // Circuit-breaker budget à 50€
+/**
+ * Récupère le quota restant pour un utilisateur
+ */
+export async function getRemainingQuota(userId: string) {
+    const supabase = createClient();
+    const today = new Date().toISOString().split('T')[0];
 
-    // 1. Circuit-Breaker Global
-    const { data: globalUsage, error: globalError } = await supabase
-        .from("ai_usage_log")
-        .select("request_count")
-        .eq("usage_date", today);
-
-    const totalGlobalRequests = (globalUsage || []).reduce((acc, curr) => acc + curr.request_count, 0);
-
-    if (totalGlobalRequests >= globalLimit) {
-        return {
-            allowed: false,
-            remaining: 0,
-            resetAt: getNextResetAt(),
-            error: "BUDGET_EXCEEDED"
-        };
-    }
-
-    // 2. Quota Individuel
-    const { data: userUsage } = await supabase
+    const { data, error } = await (await supabase)
         .from("ai_usage_log")
         .select("request_count")
         .eq("user_id", userId)
         .eq("usage_date", today)
         .single();
 
-    const currentCount = userUsage?.request_count ?? 0;
-
-    if (currentCount >= userLimit) {
-        return {
-            allowed: false,
-            remaining: 0,
-            resetAt: getNextResetAt(),
-            error: "QUOTA_EXCEEDED"
-        };
+    if (error && error.code !== "PGRST116") { // PGRST116 is "not found"
+        console.error("Error fetching quota:", error);
+        return DAILY_QUOTA;
     }
 
-    // 3. Incrémenter (UPSERT)
-    await supabase
-        .from("ai_usage_log")
-        .upsert(
-            {
-                user_id: userId,
-                usage_date: today,
-                request_count: currentCount + 1,
-            },
-            { onConflict: "user_id,usage_date" }
-        );
-
-    return {
-        allowed: true,
-        remaining: userLimit - currentCount - 1,
-        resetAt: getNextResetAt(),
-    };
+    const count = data?.request_count || 0;
+    return Math.max(0, DAILY_QUOTA - count);
 }
 
-function getNextResetAt() {
-    const reset = new Date();
-    reset.setUTCHours(24, 0, 0, 0);
-    return reset.toISOString();
+/**
+ * Incrémente le quota pour un utilisateur
+ */
+export async function incrementQuota(userId: string) {
+    const supabase = createClient();
+    const today = new Date().toISOString().split('T')[0];
+
+    // Upsert logic: insert if not exists, increment if exists
+    const { data: current } = await (await supabase)
+        .from("ai_usage_log")
+        .select("request_count")
+        .eq("user_id", userId)
+        .eq("usage_date", today)
+        .single();
+
+    if (!current) {
+        await (await supabase).from("ai_usage_log").insert({
+            user_id: userId,
+            usage_date: today,
+            request_count: 1
+        });
+    } else {
+        await (await supabase)
+            .from("ai_usage_log")
+            .update({ request_count: current.request_count + 1 })
+            .eq("user_id", userId)
+            .eq("usage_date", today);
+    }
+}
+
+/**
+ * Sauvegarde un message dans l'historique
+ */
+export async function saveMessage(userId: string, role: "user" | "assistant", content: string, conversationId?: string) {
+    const supabase = createClient();
+
+    await (await supabase).from("ai_chat_messages").insert({
+        user_id: userId,
+        role: role,
+        content: content,
+        conversation_id: conversationId || null,
+        created_at: new Date().toISOString()
+    });
+}
+
+/**
+ * Récupère l'historique des messages
+ */
+export async function getChatHistory(userId: string) {
+    const supabase = createClient();
+
+    const { data, error } = await (await supabase)
+        .from("ai_chat_messages")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+    if (error) {
+        console.error("Error fetching chat history:", error);
+        return [];
+    }
+
+    return data;
 }
