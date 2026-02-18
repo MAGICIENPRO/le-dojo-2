@@ -7,6 +7,7 @@ import {
     closestCorners,
     KeyboardSensor,
     PointerSensor,
+    TouchSensor,
     useSensor,
     useSensors,
     DragStartEvent,
@@ -103,7 +104,13 @@ export function KanbanBoard({ tricks, onTrickClick, onTrickUpdate, className }: 
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
-                distance: 5, // Avoid accidental drags when clicking
+                distance: 8, // Desktop: start drag after 8px movement
+            },
+        }),
+        useSensor(TouchSensor, {
+            activationConstraint: {
+                delay: 250,        // Mobile: hold 250ms before drag starts
+                tolerance: 5,      // Allow 5px of movement during the delay
             },
         }),
         useSensor(KeyboardSensor, {
